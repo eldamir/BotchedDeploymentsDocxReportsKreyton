@@ -1,3 +1,4 @@
+import re
 import os
 import zipfile
 import shutil
@@ -7,6 +8,8 @@ from openpyxl.reader.excel import load_workbook
 # The values to put in the PieChart
 list_of_labels = ["foo", "bar", "baz"]
 list_of_values = [25, 42, 30]
+
+row_count = len(list_of_labels)
 
 template_path = "temp.docx"
 temp_dir = "/tmp/workdir"
@@ -30,6 +33,10 @@ for i, label in enumerate(list_of_labels):
     sheet[f"A{i+2}"] = label
 for i, value in enumerate(list_of_values):
     sheet[f"B{i+2}"] = value
+
+# We can delete any extra rows of data left behind
+sheet.delete_rows(row_count + 2, 100)
+
 workbook.save(xlsx_path)
 workbook.close()
 
@@ -44,6 +51,7 @@ soup = BeautifulSoup(contents, "xml")
 plot_area = soup.find("c:plotArea")
 
 # Fix categories/labels of the pie chart
+# First the labels in the cache
 cat = plot_area.find("c:ser").find("c:cat")
 cache = cat.find("c:strCache")
 
@@ -56,8 +64,12 @@ for i, key in enumerate(list_of_labels):
     v.string = key
     pt.append(v)
     cache.append(pt)
+# Then adjust the range to fit the amount of rows used
+sheetRange = cat.find("c:strRef").find("c:f")
+sheetRange.string = re.sub(r"(^.*!\$\w+\$\d+:\$\w+\$)(\d+)$", f"\\g<1>{str(row_count + 1)}", sheetRange.string)
 
 # Fix values of the chart
+# First the values in the cache
 val = plot_area.find("c:ser").find("c:val")
 cache = val.find("c:numCache")
 
@@ -70,6 +82,9 @@ for i, key in enumerate(list_of_values):
     v.string = str(key)
     pt.append(v)
     cache.append(pt)
+# Then adjust the range to fit the amount of rows used
+sheetRange = val.find("c:numRef").find("c:f")
+sheetRange.string = re.sub(r"(^.*!\$\w+\$\d+:\$\w+\$)(\d+)$", f"\\g<1>{str(row_count + 1)}", sheetRange.string)
 
 with open(chart_xml_path, "w") as xml_file:
     xml_file.write(str(soup))
